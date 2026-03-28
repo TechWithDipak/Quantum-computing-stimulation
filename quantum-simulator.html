@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚛ Quantum Protocol Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root {
+  --bg:      #020818;
+  --bg2:     #030c20;
+  --panel:   rgba(4,12,30,0.92);
+  --border:  rgba(0,224,255,0.12);
+  --cyan:    #00e0ff;
+  --cdim:    rgba(0,224,255,0.35);
+  --violet:  #8b5cf6;
+  --green:   #10b981;
+  --red:     #ef4444;
+  --amber:   #f59e0b;
+  --txt:     #b8d8f0;
+  --txtdim:  #3a6080;
+  --head:    'Orbitron', monospace;
+  --mono:    'JetBrains Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--mono);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+body::before {
+  content:'';
+  position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(ellipse 60% 50% at 30% 50%, rgba(0,80,120,0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 70% 50%, rgba(80,20,160,0.08) 0%, transparent 70%),
+    linear-gradient(rgba(0,224,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,224,255,0.025) 1px, transparent 1px);
+  background-size: auto, auto, 44px 44px, 44px 44px;
+}
+
+/* ——— HEADER ——— */
+.hdr {
+  position:relative; z-index:20;
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(2,8,20,0.95);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+.hdr-title {
+  font-family: var(--head);
+  font-size: .85rem; font-weight:900;
+  color: var(--cyan);
+  text-shadow: 0 0 24px var(--cdim);
+  letter-spacing:.12em;
+}
+.hdr-title em { color: var(--violet); font-style:normal; }
+.hdr-badges { display:flex; gap:8px; align-items:center; }
+.badge {
+  font-size:.6rem; letter-spacing:.06em;
+  padding:3px 10px; border-radius:20px;
+  background: rgba(0,224,255,0.06);
+  border: 1px solid var(--border);
+}
+.badge.live { color:var(--green); border-color:rgba(16,185,129,0.3); }
+#hdrState { color:var(--cyan); }
+
+/* ——— MAIN ——— */
+.main {
+  flex:1; display:flex; overflow:hidden;
+  position:relative; z-index:1;
+  min-height:0;
+}
+
+/* ——— BLOCH PANEL ——— */
+.p-bloch {
+  flex:1; position:relative; overflow:hidden;
+  min-width: 0;
+}
+#bloch-canvas { display:block; width:100% !important; height:100% !important; }
+
+.bloch-label {
+  position:absolute; pointer-events:none;
+  transform:translate(-50%,-50%);
+  font-family:var(--mono); font-size:.7rem; font-weight:600;
+  text-shadow:0 0 12px currentColor;
+  transition: opacity .3s;
+}
+#lbl0  { color:var(--cyan); }
+#lbl1  { color:var(--violet); }
+#lblpx { color:var(--green); font-size:.6rem; }
+#lblmx { color:var(--green); font-size:.6rem; }
+#lblpy { color:var(--amber); font-size:.6rem; }
+
+.bloch-overlay {
+  position:absolute; bottom:12px; left:14px;
+  font-size:.6rem; color:var(--txtdim); line-height:1.8;
+  pointer-events:none;
+}
+.bloch-overlay .v { color:var(--cyan); }
+
+.bloch-legend {
+  position:absolute; top:12px; left:14px;
+  font-size:.55rem; color:var(--txtdim); line-height:1.8;
+  pointer-events:none;
+}
+.bloch-legend span { display:inline-block; width:8px; height:8px;
+  border-radius:50%; margin-right:5px; vertical-align:middle; }
+
+/* ——— CONTROLS PANEL ——— */
+.p-ctrl {
+  width:320px; flex-shrink:0;
+  border-left:1px solid var(--border);
+  background:var(--panel);
+  backdrop-filter:blur(14px);
+  display:flex; flex-direction:column;
+  overflow:hidden;
+}
+.ctrl-scroll {
+  flex:1; overflow-y:auto; overflow-x:hidden;
+}
+.ctrl-scroll::-webkit-scrollbar { width:3px; }
+.ctrl-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+.sec {
+  padding:12px 14px;
+  border-bottom:1px solid var(--border);
+}
+.sec-ttl {
+  font-family:var(--head);
+  font-size:.48rem; letter-spacing:.18em;
+  color:var(--txtdim); text-transform:uppercase;
+  margin-bottom:9px;
+}
+
+/* State rows */
+.srow { display:flex; justify-content:space-between; align-items:center; padding:1px 0; }
+.slbl { color:var(--txtdim); font-size:.62rem; }
+.sval { font-size:.68rem; font-weight:600; font-family:var(--mono); }
+.sval.c0  { color:var(--cyan); }
+.sval.c1  { color:var(--violet); }
+.sval.cg  { color:var(--green); }
+
+/* Prob bars */
+.pbar-wrap { margin:5px 0; }
+.pbar-top  { display:flex; justify-content:space-between; font-size:.6rem; margin-bottom:3px; }
+.pbar-track {
+  height:18px; border-radius:3px; overflow:hidden;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border); position:relative;
+}
+.pbar-fill {
+  height:100%; border-radius:2px;
+  transition: width .5s cubic-bezier(.4,0,.2,1);
+}
+.pf0 { background:linear-gradient(90deg,#0891b2,#00e0ff); box-shadow:0 0 10px rgba(0,224,255,.4); }
+.pf1 { background:linear-gradient(90deg,#6d28d9,#8b5cf6); box-shadow:0 0 10px rgba(139,92,246,.4); }
+
+/* Phase circles */
+.phase-row { display:flex; gap:10px; justify-content:center; margin-top:6px; }
+.phase-item { text-align:center; }
+.phase-item .ph-lbl { font-size:.52rem; color:var(--txtdim); margin-bottom:3px; }
+canvas.phasec { border-radius:50%; background:rgba(255,255,255,0.03); border:1px solid var(--border); }
+
+/* Gates */
+.gates-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; }
+.gbtn {
+  background:rgba(0,224,255,0.04);
+  border:1px solid rgba(0,224,255,0.18);
+  color:var(--cyan);
+  font-family:var(--head); font-size:.72rem; font-weight:700;
+  padding:9px 5px 6px;
+  border-radius:6px; cursor:pointer;
+  transition:all .18s; letter-spacing:.04em;
+  position:relative; overflow:hidden;
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+}
+.gbtn .gd { font-family:var(--mono); font-size:.47rem; font-weight:400; color:var(--txtdim); }
+.gbtn:hover {
+  background:rgba(0,224,255,0.1);
+  border-color:var(--cyan);
+  box-shadow:0 0 14px rgba(0,224,255,.25), inset 0 0 14px rgba(0,224,255,.05);
+  transform:translateY(-1px);
+}
+.gbtn:active { transform:scale(.96); }
+.gbtn.vio { color:var(--violet); border-color:rgba(139,92,246,.22); background:rgba(139,92,246,.04); }
+.gbtn.vio:hover { background:rgba(139,92,246,.1); border-color:var(--violet); box-shadow:0 0 14px rgba(139,92,246,.25); }
+
+/* Sliders */
+.slider-wrap { margin:6px 0; }
+.slider-top { display:flex; justify-content:space-between; font-size:.58rem; margin-bottom:4px; color:var(--txtdim); }
+.slider-top span { color:var(--cyan); }
+input[type=range] {
+  width:100%; -webkit-appearance:none; height:3px;
+  border-radius:2px; background:rgba(0,224,255,.12); outline:none; cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
+  background:var(--cyan); cursor:pointer;
+  box-shadow:0 0 8px var(--cdim);
+}
+
+/* Measure / reset */
+.action-row { display:flex; gap:7px; margin-top:7px; }
+.btn-m {
+  flex:1; padding:9px 6px;
+  background:linear-gradient(135deg,rgba(239,68,68,.08),rgba(239,68,68,.15));
+  border:1px solid rgba(239,68,68,.35); color:var(--red);
+  font-family:var(--head); font-size:.58rem; letter-spacing:.1em;
+  border-radius:6px; cursor:pointer; transition:all .18s;
+}
+.btn-m:hover { background:rgba(239,68,68,.2); box-shadow:0 0 18px rgba(239,68,68,.3); }
+.btn-r {
+  flex:1; padding:9px 6px;
+  background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.08);
+  color:var(--txtdim); font-family:var(--head); font-size:.58rem;
+  letter-spacing:.1em; border-radius:6px; cursor:pointer; transition:all .18s;
+}
+.btn-r:hover { background:rgba(255,255,255,.07); color:var(--txt); }
+
+/* Measure result */
+.mresult {
+  text-align:center; padding:7px; border-radius:6px;
+  font-family:var(--head); font-size:.65rem; letter-spacing:.08em;
+  min-height:38px; display:flex; align-items:center; justify-content:center;
+  transition:all .3s;
+}
+.mresult.empty { color:var(--txtdim); border:1px solid var(--border); }
+.mresult.r0 {
+  color:var(--cyan); font-size:1.1rem; font-weight:900;
+  background:rgba(0,224,255,.07); border:1px solid rgba(0,224,255,.3);
+  text-shadow:0 0 20px var(--cyan);
+  animation: resultPop .4s ease;
+}
+.mresult.r1 {
+  color:var(--violet); font-size:1.1rem; font-weight:900;
+  background:rgba(139,92,246,.07); border:1px solid rgba(139,92,246,.3);
+  text-shadow:0 0 20px var(--violet);
+  animation: resultPop .4s ease;
+}
+@keyframes resultPop {
+  0%  { transform:scale(.8); opacity:0; }
+  60% { transform:scale(1.06); }
+  100%{ transform:scale(1); opacity:1; }
+}
+
+/* Algo buttons */
+.algo-list { display:flex; flex-direction:column; gap:5px; }
+.abtn {
+  padding:7px 10px; text-align:left;
+  background:rgba(16,185,129,.04); border:1px solid rgba(16,185,129,.18);
+  color:var(--green); font-family:var(--mono); font-size:.6rem;
+  border-radius:5px; cursor:pointer; transition:all .18s;
+}
+.abtn:hover { background:rgba(16,185,129,.1); border-color:var(--green); box-shadow:0 0 10px rgba(16,185,129,.2); }
+
+/* ——— CIRCUIT BAR ——— */
+.circuit-bar {
+  position:relative; z-index:20; flex-shrink:0;
+  height:58px;
+  border-top:1px solid var(--border);
+  background:var(--bg2);
+  display:flex; align-items:center;
+  padding:0 14px; gap:10px;
+  overflow-x:auto;
+}
+.circuit-bar::-webkit-scrollbar { height:2px; }
+.circuit-bar::-webkit-scrollbar-thumb { background:var(--border); }
+
+.c-label { font-family:var(--head); font-size:.46rem; color:var(--txtdim); letter-spacing:.14em; white-space:nowrap; flex-shrink:0; }
+
+.c-wire { display:flex; align-items:center; gap:0; flex:1; }
+
+.c-start {
+  width:26px; height:26px; flex-shrink:0;
+  border:1.5px solid var(--cyan); border-radius:4px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:.55rem; color:var(--cyan);
+}
+.c-line {
+  width:18px; height:1px; flex-shrink:0;
+  background:rgba(0,224,255,.25);
+}
+.c-gate {
+  width:30px; height:30px; flex-shrink:0;
+  border:1px solid var(--cyan); border-radius:4px;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--head); font-size:.6rem; font-weight:700;
+  color:var(--cyan); background:rgba(0,224,255,.07);
+  animation: gAppear .3s ease;
+}
+.c-gate.cg-vio { color:var(--violet); border-color:var(--violet); background:rgba(139,92,246,.07); }
+.c-gate.cg-meas { color:var(--red); border-color:var(--red); background:rgba(239,68,68,.07); font-size:.46rem; }
+@keyframes gAppear {
+  from { opacity:0; transform:scale(.4) translateY(-8px); }
+  to   { opacity:1; transform:scale(1) translateY(0); }
+}
+.c-end {
+  width:30px; height:1px;
+  background:rgba(0,224,255,.25);
+  flex-shrink:0;
+}
+
+/* Flash overlay */
+#flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:200; transition:opacity .08s; }
+#flash.on { opacity:.18; }
+
+/* Gate ripple */
+@keyframes gRipple {
+  0%   { box-shadow:0 0 0 0 rgba(0,224,255,.5); }
+  100% { box-shadow:0 0 0 20px rgba(0,224,255,0); }
+}
+.gbtn.pulse { animation: gRipple .4s ease; }
+
+</style>
+</head>
+<body>
+
+<div id="flash"></div>
+
+<!-- HEADER -->
+<header class="hdr">
+  <div class="hdr-title">⚛ QUANTUM<em>PROTOCOL</em> SIMULATOR</div>
+  <div class="hdr-badges">
+    <div class="badge live">● LIVE</div>
+    <div class="badge" id="hdrState">|ψ⟩ = |0⟩</div>
+    <div class="badge" style="color:var(--txtdim)">SINGLE QUBIT</div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- BLOCH SPHERE PANEL -->
+  <div class="p-bloch" id="blochPanel">
+    <canvas id="bloch-canvas"></canvas>
+
+    <!-- Floating labels (positioned by JS) -->
+    <div class="bloch-label" id="lbl0">|0⟩</div>
+    <div class="bloch-label" id="lbl1">|1⟩</div>
+    <div class="bloch-label" id="lblpx">|+⟩</div>
+    <div class="bloch-label" id="lblmx">|−⟩</div>
+    <div class="bloch-label" id="lblpy">|+i⟩</div>
+
+    <div class="bloch-legend">
+      <div><span style="background:var(--cyan)"></span>Z-axis (|0⟩ ↔ |1⟩)</div>
+      <div><span style="background:var(--green)"></span>X-axis</div>
+      <div><span style="background:var(--amber)"></span>Y-axis</div>
+      <div><span style="background:#ffdd00"></span>State vector</div>
+    </div>
+
+    <div class="bloch-overlay">
+      <div>Bloch: (<span class="v" id="iX">0.000</span>, <span class="v" id="iY">0.000</span>, <span class="v" id="iZ">1.000</span>)</div>
+      <div>θ: <span class="v" id="iTheta">0.000</span>  φ: <span class="v" id="iPhi">0.000</span></div>
+      <div style="margin-top:2px;font-size:.52rem">🖱 Drag to rotate</div>
+    </div>
+  </div>
+
+  <!-- CONTROLS PANEL -->
+  <aside class="p-ctrl">
+  <div class="ctrl-scroll">
+
+    <!-- Quantum State -->
+    <div class="sec">
+      <div class="sec-ttl">Quantum State |ψ⟩ = α|0⟩ + β|1⟩</div>
+      <div class="srow"><span class="slbl">α (|0⟩ amplitude)</span><span class="sval c0" id="vAlpha">1.000 + 0.000i</span></div>
+      <div class="srow"><span class="slbl">β (|1⟩ amplitude)</span><span class="sval c1" id="vBeta">0.000 + 0.000i</span></div>
+      <div class="srow"><span class="slbl">|α|² + |β|² (norm)</span><span class="sval cg" id="vNorm">1.000 ✓</span></div>
+    </div>
+
+    <!-- Probability -->
+    <div class="sec">
+      <div class="sec-ttl">Measurement Probability</div>
+      <div class="pbar-wrap">
+        <div class="pbar-top"><span style="color:var(--cyan)">|0⟩ P(0)</span><span style="color:var(--cyan)" id="p0txt">100.0%</span></div>
+        <div class="pbar-track"><div class="pbar-fill pf0" id="pb0" style="width:100%"></div></div>
+      </div>
+      <div class="pbar-wrap">
+        <div class="pbar-top"><span style="color:var(--violet)">|1⟩ P(1)</span><span style="color:var(--violet)" id="p1txt">0.0%</span></div>
+        <div class="pbar-track"><div class="pbar-fill pf1" id="pb1" style="width:0%"></div></div>
+      </div>
+      <!-- Phase Phasors -->
+      <div class="phase-row">
+        <div class="phase-item">
+          <div class="ph-lbl">α phase</div>
+          <canvas class="phasec" id="phaseA" width="52" height="52"></canvas>
+        </div>
+        <div class="phase-item" style="display:flex;align-items:center;font-size:.7rem;color:var(--txtdim)">+</div>
+        <div class="phase-item">
+          <div class="ph-lbl">β phase</div>
+          <canvas class="phasec" id="phaseB" width="52" height="52"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Measurement -->
+    <div class="sec">
+      <div class="sec-ttl">Measurement & Collapse</div>
+      <div class="mresult empty" id="mresult">— press MEASURE to collapse —</div>
+      <div class="action-row">
+        <button class="btn-m" onclick="doMeasure()">⚡ MEASURE</button>
+        <button class="btn-r" onclick="doReset()">↺ RESET |0⟩</button>
+      </div>
+    </div>
+
+    <!-- Gates -->
+    <div class="sec">
+      <div class="sec-ttl">Quantum Gates</div>
+      <div class="gates-grid">
+        <button class="gbtn" id="gX" onclick="applyGate('X')">X<span class="gd">Pauli NOT</span></button>
+        <button class="gbtn" id="gY" onclick="applyGate('Y')">Y<span class="gd">Pauli Y</span></button>
+        <button class="gbtn" id="gZ" onclick="applyGate('Z')">Z<span class="gd">Phase flip</span></button>
+        <button class="gbtn vio" id="gH" onclick="applyGate('H')">H<span class="gd">Hadamard</span></button>
+        <button class="gbtn vio" id="gS" onclick="applyGate('S')">S<span class="gd">Phase π/2</span></button>
+        <button class="gbtn vio" id="gT" onclick="applyGate('T')">T<span class="gd">Phase π/4</span></button>
+      </div>
+    </div>
+
+    <!-- Manual Control -->
+    <div class="sec">
+      <div class="sec-ttl">Manual State Control</div>
+      <div class="slider-wrap">
+        <div class="slider-top">θ (polar — |0⟩↔|1⟩ mix) <span id="sTheta">0.0°</span></div>
+        <input type="range" id="slTheta" min="0" max="180" value="0" step="1" oninput="fromSliders()">
+      </div>
+      <div class="slider-wrap">
+        <div class="slider-top">φ (azimuthal — phase) <span id="sPhi">0.0°</span></div>
+        <input type="range" id="slPhi" min="0" max="360" value="0" step="1" oninput="fromSliders()">
+      </div>
+    </div>
+
+    <!-- Algorithms -->
+    <div class="sec">
+      <div class="sec-ttl">Algorithm Demos</div>
+      <div class="algo-list">
+        <button class="abtn" onclick="demoSuper()">⚡ Superposition: |0⟩ → H → |+⟩</button>
+        <button class="abtn" onclick="demoXGate()">🔄 NOT Gate: |0⟩ → X → |1⟩</button>
+        <button class="abtn" onclick="demoHZH()">🔬 HZH = X identity demo</button>
+        <button class="abtn" onclick="demoS4()">🌀 S⁴ = I phase accumulation</button>
+        <button class="abtn" onclick="demoBell()">🔗 Equator tour (H → S → H)</button>
+      </div>
+    </div>
+
+    <!-- Gate Matrix Info -->
+    <div class="sec">
+      <div class="sec-ttl">Selected Gate Matrix</div>
+      <div style="font-size:.58rem; line-height:1.7; color:var(--txtdim)" id="gateInfo">
+        Click a gate to see its matrix representation.
+      </div>
+    </div>
+
+  </div><!-- end scroll -->
+  </aside>
+</div>
+
+<!-- CIRCUIT TIMELINE -->
+<div class="circuit-bar" id="circuitBar">
+  <div class="c-label">CIRCUIT</div>
+  <div class="c-wire" id="cWire">
+    <div class="c-start">|0⟩</div>
+    <div class="c-line"></div>
+  </div>
+  <div class="c-end"></div>
+</div>
+
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  COMPLEX NUMBER UTILITIES
+// ═══════════════════════════════════════════════════════════
+const C = {
+  mk:   (re, im=0) => ({re, im}),
+  add:  (a, b) => ({re: a.re+b.re,              im: a.im+b.im}),
+  mul:  (a, b) => ({re: a.re*b.re - a.im*b.im,  im: a.re*b.im + a.im*b.re}),
+  abs2: (a)    => a.re*a.re + a.im*a.im,
+  abs:  (a)    => Math.sqrt(C.abs2(a)),
+  sc:   (a, s) => ({re: a.re*s, im: a.im*s}),
+  arg:  (a)    => Math.atan2(a.im, a.re),
+  exp:  (th)   => ({re: Math.cos(th), im: Math.sin(th)}),
+  fmt:  (a) => {
+    const sign = a.im >= 0 ? '+' : '−';
+    return `${a.re.toFixed(3)} ${sign} ${Math.abs(a.im).toFixed(3)}i`;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+//  GATE DEFINITIONS  (2×2 complex matrices)
+// ═══════════════════════════════════════════════════════════
+const R2 = 1/Math.SQRT2;
+const GATES = {
+  X: [[C.mk(0),   C.mk(1)  ], [C.mk(1),   C.mk(0)  ]],
+  Y: [[C.mk(0),   C.mk(0,-1)],[C.mk(0,1), C.mk(0)  ]],
+  Z: [[C.mk(1),   C.mk(0)  ], [C.mk(0),   C.mk(-1) ]],
+  H: [[C.mk(R2),  C.mk(R2) ], [C.mk(R2),  C.mk(-R2)]],
+  S: [[C.mk(1),   C.mk(0)  ], [C.mk(0),   C.mk(0,1)]],
+  T: [[C.mk(1),   C.mk(0)  ], [C.mk(0),   C.exp(Math.PI/4)]],
+};
+
+const GATE_COLORS   = {X:'#00e0ff',Y:'#00e0ff',Z:'#00e0ff', H:'#8b5cf6',S:'#8b5cf6',T:'#8b5cf6'};
+const GATE_MATRICES = {
+  X: 'X = [[0,1],[1,0]]  — flips |0⟩↔|1⟩\nBloch: π rotation around X-axis',
+  Y: 'Y = [[0,−i],[i,0]] — complex phase flip\nBloch: π rotation around Y-axis',
+  Z: 'Z = [[1,0],[0,−1]] — phase flip β→−β\nBloch: π rotation around Z-axis',
+  H: 'H = 1/√2 [[1,1],[1,−1]]\nCreates superposition |+⟩ or |−⟩\nBloch: π/2 rotation X then Z',
+  S: 'S = [[1,0],[0,i]] — phase gate π/2\nBloch: π/2 rotation around Z-axis',
+  T: 'T = [[1,0],[0,e^(iπ/4)]] — π/4 phase\nBloch: π/4 rotation around Z-axis',
+};
+
+// ═══════════════════════════════════════════════════════════
+//  QUANTUM STATE
+// ═══════════════════════════════════════════════════════════
+let QS = { alpha: C.mk(1), beta: C.mk(0) };
+
+function applyMatrix(gate, s) {
+  const a = C.add(C.mul(gate[0][0], s.alpha), C.mul(gate[0][1], s.beta));
+  const b = C.add(C.mul(gate[1][0], s.alpha), C.mul(gate[1][1], s.beta));
+  const norm = Math.sqrt(C.abs2(a) + C.abs2(b)) || 1;
+  return { alpha: C.sc(a, 1/norm), beta: C.sc(b, 1/norm) };
+}
+
+// Returns Bloch sphere vector (bx, by, bz) for pure state
+function toBloch(s) {
+  const {alpha:a, beta:b} = s;
+  return {
+    x:  2*(a.re*b.re + a.im*b.im),
+    y:  2*(a.re*b.im - a.im*b.re),
+    z:  C.abs2(a) - C.abs2(b)
+  };
+}
+
+function getProbs(s) {
+  return { p0: C.abs2(s.alpha), p1: C.abs2(s.beta) };
+}
+
+// ═══════════════════════════════════════════════════════════
+//  THREE.JS  —  BLOCH SPHERE SCENE
+// ═══════════════════════════════════════════════════════════
+const bp      = document.getElementById('blochPanel');
+const cvs     = document.getElementById('bloch-canvas');
+const renderer= new THREE.WebGLRenderer({canvas:cvs, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 100);
+
+// Camera spherical coords
+let camTh = 0.55, camPh = 1.15, camR = 3.6;
+
+function syncCamera() {
+  camera.position.set(
+    camR * Math.sin(camPh) * Math.sin(camTh),
+    camR * Math.cos(camPh),
+    camR * Math.sin(camPh) * Math.cos(camTh)
+  );
+  camera.lookAt(0,0,0);
+}
+syncCamera();
+
+// ── Mouse / touch drag ──
+let drag=false, mx=0, my=0, autoSpin=true;
+cvs.addEventListener('mousedown',  e=>{drag=true; mx=e.clientX; my=e.clientY; autoSpin=false;});
+window.addEventListener('mousemove',e=>{
+  if(!drag) return;
+  camTh -= (e.clientX-mx)*0.007; camPh = Math.max(.08,Math.min(Math.PI-.08, camPh-(e.clientY-my)*.007));
+  mx=e.clientX; my=e.clientY; syncCamera();
+});
+window.addEventListener('mouseup', ()=>{drag=false; setTimeout(()=>autoSpin=true,3000);});
+cvs.addEventListener('touchstart', e=>{if(e.touches.length===1){drag=true;mx=e.touches[0].clientX;my=e.touches[0].clientY;autoSpin=false;}});
+cvs.addEventListener('touchmove',  e=>{if(!drag||e.touches.length!==1)return;
+  camTh-=(e.touches[0].clientX-mx)*.007; camPh=Math.max(.08,Math.min(Math.PI-.08,camPh-(e.touches[0].clientY-my)*.007));
+  mx=e.touches[0].clientX; my=e.touches[0].clientY; syncCamera(); e.preventDefault();},{passive:false});
+cvs.addEventListener('touchend',   ()=>{drag=false; setTimeout(()=>autoSpin=true,3000);});
+
+// ── Geometry helpers ──
+function makeLine(from, to, color, opacity=0.55) {
+  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...from), new THREE.Vector3(...to)]);
+  return new THREE.Line(g, new THREE.LineBasicMaterial({color,opacity,transparent:opacity<1}));
+}
+
+function makeRing(axis, color, segs=64, r=1.0, opacity=0.22) {
+  const pts = [];
+  for (let i=0; i<=segs; i++) {
+    const a = (i/segs)*Math.PI*2;
+    if (axis==='y') pts.push(new THREE.Vector3(Math.cos(a)*r, 0, Math.sin(a)*r));
+    else if(axis==='x') pts.push(new THREE.Vector3(0, Math.cos(a)*r, Math.sin(a)*r));
+    else pts.push(new THREE.Vector3(Math.cos(a)*r, Math.sin(a)*r, 0));
+  }
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  return new THREE.Line(g, new THREE.LineBasicMaterial({color,opacity,transparent:true}));
+}
+
+function makeDot(pos, color, r=0.042) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r,8,8), new THREE.MeshBasicMaterial({color}));
+  m.position.set(...pos); scene.add(m); return m;
+}
+
+// ── Build scene ──
+// Inner filled sphere
+scene.add(Object.assign(new THREE.Mesh(
+  new THREE.SphereGeometry(1,32,32),
+  new THREE.MeshBasicMaterial({color:0x00080f,transparent:true,opacity:.75})
+)));
+
+// Glow atmosphere (backside)
+scene.add(Object.assign(new THREE.Mesh(
+  new THREE.SphereGeometry(1.04,32,32),
+  new THREE.MeshBasicMaterial({color:0x003850,transparent:true,opacity:.12,side:THREE.BackSide})
+)));
+
+// Wireframe sphere
+scene.add(Object.assign(new THREE.Mesh(
+  new THREE.SphereGeometry(1,24,16),
+  new THREE.MeshBasicMaterial({color:0x00e0ff,wireframe:true,transparent:true,opacity:.07})
+)));
+
+// Circles  (Bloch: Z→ThreeY, X→ThreeX, Y→ThreeZ)
+scene.add(makeRing('y', 0x00e0ff, 64, 1.0, 0.28)); // equatorial
+scene.add(makeRing('x', 0x00e0ff, 48, 1.0, 0.15)); // meridian ZY plane
+scene.add(makeRing('z', 0x00e0ff, 48, 1.0, 0.15)); // meridian ZX plane
+
+// Axes  (Three.js Y = Bloch Z)
+scene.add(makeLine([0,-1.38,0],[0,1.38,0], 0x00e0ff, 0.6));
+scene.add(makeLine([-1.32,0,0],[1.32,0,0], 0x10b981, 0.6));
+scene.add(makeLine([0,0,-1.32],[0,0,1.32], 0xf59e0b, 0.6));
+
+// Pole / axis dots
+makeDot([0,1.05,0],  0x00e0ff);  // |0⟩ north
+makeDot([0,-1.05,0], 0x8b5cf6);  // |1⟩ south
+makeDot([1.05,0,0],  0x10b981);
+makeDot([-1.05,0,0], 0x10b981);
+makeDot([0,0,1.05],  0xf59e0b);
+
+// ── State vector arrow ──
+const arrowDir = new THREE.Vector3(0,1,0);
+const arrow = new THREE.ArrowHelper(arrowDir, new THREE.Vector3(0,0,0), 1.0, 0xffdd00, 0.14, 0.07);
+scene.add(arrow);
+
+// Glow arrow (transparent overlay)
+const arrowGlow = new THREE.ArrowHelper(arrowDir.clone(), new THREE.Vector3(0,0,0), 1.0, 0xffdd00, 0.18, 0.09);
+arrowGlow.line.material.opacity = 0.18; arrowGlow.line.material.transparent = true;
+arrowGlow.cone.material.opacity = 0.18; arrowGlow.cone.material.transparent = true;
+scene.add(arrowGlow);
+
+// Tip dot
+const tipDot = new THREE.Mesh(new THREE.SphereGeometry(.065,8,8), new THREE.MeshBasicMaterial({color:0xffdd00}));
+scene.add(tipDot);
+
+// ─────────────────────────────────────────
+// Bloch↔Three coords:
+//   Bloch (bx, by, bz) → Three (bx, bz, by)
+//   Bloch Z (up = |0⟩) → Three Y (up)
+// ─────────────────────────────────────────
+function b2t(b) { return {x:b.x, y:b.z, z:b.y}; }
+
+// ═══════════════════════════════════════════════════════════
+//  ANIMATION SYSTEM
+// ═══════════════════════════════════════════════════════════
+const ANIM_N = 38;
+let animSrc = {x:0,y:1,z:0};
+let animDst = {x:0,y:1,z:0};
+let animCur = {x:0,y:1,z:0};
+let animStep= ANIM_N; // starts finished
+
+function kickAnim(blochVec) {
+  animSrc = {...animCur};
+  animDst = b2t(blochVec);
+  animStep = 0;
+}
+
+function easeInOut(t) { return t < .5 ? 2*t*t : -1+(4-2*t)*t; }
+
+function lerp3(a,b,t) {
+  const e=easeInOut(t);
+  return {x:a.x+(b.x-a.x)*e, y:a.y+(b.y-a.y)*e, z:a.z+(b.z-a.z)*e};
+}
+
+function updateArrow(p) {
+  const len = Math.sqrt(p.x*p.x+p.y*p.y+p.z*p.z);
+  if (len < 1e-6) return;
+  const d = new THREE.Vector3(p.x/len, p.y/len, p.z/len);
+  arrow.setDirection(d);      arrowGlow.setDirection(d);
+  tipDot.position.set(p.x,p.y,p.z);
+  animCur = p;
+}
+
+// ── Label projection ──
+function project(x3,y3,z3) {
+  const v = new THREE.Vector3(x3,y3,z3).project(camera);
+  const r = bp.getBoundingClientRect();
+  return { left:(v.x*.5+.5)*r.width+'px', top:(-.5*v.y+.5)*r.height+'px' };
+}
+
+function refreshLabels() {
+  const L = (id,x,y,z)=>Object.assign(document.getElementById(id).style, project(x,y,z));
+  L('lbl0', 0, 1.22,0);
+  L('lbl1', 0,-1.22,0);
+  L('lblpx', 1.22,0,0);
+  L('lblmx',-1.22,0,0);
+  L('lblpy', 0,0,1.22);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PHASE PHASOR DRAWING
+// ═══════════════════════════════════════════════════════════
+function drawPhasor(canv, amp, color) {
+  const s = canv.width, ctx = canv.getContext('2d');
+  ctx.clearRect(0,0,s,s);
+  const cx=s/2, cy=s/2, r=s/2-5;
+  // ring
+  ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  // crosshairs
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(cx-r,cy); ctx.lineTo(cx+r,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r); ctx.stroke();
+  // vector
+  const len = Math.min(C.abs(amp),1) * r;
+  const ang = C.arg(amp);
+  const ex = cx + Math.cos(ang)*len;
+  const ey = cy - Math.sin(ang)*len;
+  ctx.strokeStyle=color; ctx.lineWidth=2;
+  ctx.shadowColor=color; ctx.shadowBlur=6;
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(ex,ey); ctx.stroke();
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.arc(ex,ey,3.5,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI UPDATE
+// ═══════════════════════════════════════════════════════════
+function updateUI(s) {
+  const {alpha:a, beta:b} = s;
+  const {p0,p1} = getProbs(s);
+  const bl = toBloch(s);
+
+  // State display
+  document.getElementById('vAlpha').textContent = C.fmt(a);
+  document.getElementById('vBeta').textContent  = C.fmt(b);
+  document.getElementById('vNorm').textContent  = (p0+p1).toFixed(4)+' ✓';
+
+  // Probability bars
+  document.getElementById('pb0').style.width   = (p0*100).toFixed(1)+'%';
+  document.getElementById('pb1').style.width   = (p1*100).toFixed(1)+'%';
+  document.getElementById('p0txt').textContent = (p0*100).toFixed(1)+'%';
+  document.getElementById('p1txt').textContent = (p1*100).toFixed(1)+'%';
+
+  // Phasors
+  drawPhasor(document.getElementById('phaseA'), a, '#00e0ff');
+  drawPhasor(document.getElementById('phaseB'), b, '#8b5cf6');
+
+  // Bloch info
+  document.getElementById('iX').textContent     = bl.x.toFixed(3);
+  document.getElementById('iY').textContent     = bl.y.toFixed(3);
+  document.getElementById('iZ').textContent     = bl.z.toFixed(3);
+  const theta = 2*Math.acos(Math.min(1,Math.sqrt(p0)));
+  const phi   = ((C.arg(b)-C.arg(a))+4*Math.PI)%(2*Math.PI);
+  document.getElementById('iTheta').textContent = theta.toFixed(3);
+  document.getElementById('iPhi').textContent   = phi.toFixed(3);
+
+  // Header badge
+  let label = '|ψ⟩ = α|0⟩ + β|1⟩';
+  if (p0>0.999) label='|ψ⟩ = |0⟩';
+  else if (p1>0.999) label='|ψ⟩ = |1⟩';
+  else if (Math.abs(p0-.5)<.01) {
+    if (Math.abs(bl.x-1)<.05)       label='|ψ⟩ = |+⟩';
+    else if (Math.abs(bl.x+1)<.05)  label='|ψ⟩ = |−⟩';
+    else if (Math.abs(bl.y-1)<.05)  label='|ψ⟩ = |+i⟩';
+    else if (Math.abs(bl.y+1)<.05)  label='|ψ⟩ = |−i⟩';
+  }
+  document.getElementById('hdrState').textContent = label;
+
+  // Kick animation
+  kickAnim(bl);
+
+  // Sync sliders silently
+  const tDeg = theta*180/Math.PI;
+  const pDeg = phi  *180/Math.PI;
+  document.getElementById('slTheta').value   = tDeg.toFixed(0);
+  document.getElementById('slPhi').value     = pDeg.toFixed(0);
+  document.getElementById('sTheta').textContent = tDeg.toFixed(1)+'°';
+  document.getElementById('sPhi').textContent   = pDeg.toFixed(1)+'°';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GATE APPLICATION
+// ═══════════════════════════════════════════════════════════
+function applyGate(name) {
+  QS = applyMatrix(GATES[name], QS);
+  updateUI(QS);
+  addCircuitGate(name);
+  // Show gate matrix
+  document.getElementById('gateInfo').textContent = GATE_MATRICES[name] || '';
+  // Pulse button
+  const btn = document.getElementById('g'+name);
+  if (btn) { btn.classList.remove('pulse'); void btn.offsetWidth; btn.classList.add('pulse'); }
+  // Clear measure
+  const mr = document.getElementById('mresult');
+  mr.textContent='— press MEASURE to collapse —'; mr.className='mresult empty';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  MEASUREMENT
+// ═══════════════════════════════════════════════════════════
+function doMeasure() {
+  const {p0} = getProbs(QS);
+  const outcome = Math.random() < p0 ? 0 : 1;
+
+  // Flash
+  const fl=document.getElementById('flash');
+  fl.classList.add('on'); setTimeout(()=>fl.classList.remove('on'), 120);
+
+  const mr = document.getElementById('mresult');
+  mr.textContent = outcome===0 ? '|0⟩ measured' : '|1⟩ measured';
+  mr.className = 'mresult ' + (outcome===0 ? 'r0' : 'r1');
+
+  // Collapse
+  QS = outcome===0
+    ? {alpha:C.mk(1), beta:C.mk(0)}
+    : {alpha:C.mk(0), beta:C.mk(1)};
+
+  updateUI(QS);
+  addCircuitGate('M'+outcome);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RESET
+// ═══════════════════════════════════════════════════════════
+function doReset() {
+  QS = {alpha:C.mk(1), beta:C.mk(0)};
+  updateUI(QS);
+  resetCircuit();
+  const mr=document.getElementById('mresult');
+  mr.textContent='— press MEASURE to collapse —'; mr.className='mresult empty';
+  document.getElementById('gateInfo').textContent='Click a gate to see its matrix representation.';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SLIDERS → STATE
+// ═══════════════════════════════════════════════════════════
+function fromSliders() {
+  const th = parseFloat(document.getElementById('slTheta').value)*Math.PI/180;
+  const ph = parseFloat(document.getElementById('slPhi').value)  *Math.PI/180;
+  document.getElementById('sTheta').textContent=(th*180/Math.PI).toFixed(1)+'°';
+  document.getElementById('sPhi').textContent  =(ph*180/Math.PI).toFixed(1)+'°';
+  QS = { alpha: C.mk(Math.cos(th/2)), beta: C.mul(C.exp(ph), C.mk(Math.sin(th/2))) };
+  updateUI(QS);
+  const mr=document.getElementById('mresult');
+  mr.textContent='— press MEASURE to collapse —'; mr.className='mresult empty';
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CIRCUIT DISPLAY
+// ═══════════════════════════════════════════════════════════
+function addCircuitGate(name) {
+  const wire = document.getElementById('cWire');
+  const line = document.createElement('div'); line.className='c-line';
+  const gate = document.createElement('div');
+  if (name==='M0'||name==='M1') {
+    gate.className='c-gate cg-meas';
+    gate.textContent = name==='M0' ? 'M|0⟩' : 'M|1⟩';
+  } else {
+    const isVio = ['H','S','T'].includes(name);
+    gate.className='c-gate'+(isVio?' cg-vio':'');
+    gate.textContent=name;
+    gate.style.color = GATE_COLORS[name]||'var(--cyan)';
+    gate.style.borderColor = (GATE_COLORS[name]||'var(--cyan)')+'88';
+  }
+  wire.appendChild(line);
+  wire.appendChild(gate);
+  // Scroll right
+  const cb = document.getElementById('circuitBar');
+  cb.scrollLeft = cb.scrollWidth;
+}
+
+function resetCircuit() {
+  const wire = document.getElementById('cWire');
+  wire.innerHTML='';
+  const s=document.createElement('div'); s.className='c-start'; s.textContent='|0⟩';
+  const l=document.createElement('div'); l.className='c-line';
+  wire.appendChild(s); wire.appendChild(l);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ALGORITHM DEMOS
+// ═══════════════════════════════════════════════════════════
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function runSeq(ops) {
+  doReset();
+  await sleep(300);
+  for (const op of ops) {
+    applyGate(op);
+    await sleep(700);
+  }
+}
+
+function demoSuper()  { runSeq(['H']); }
+function demoXGate()  { runSeq(['X']); }
+function demoHZH()    { runSeq(['H','Z','H']); }
+async function demoS4() {
+  doReset();
+  await sleep(300);
+  applyGate('H'); await sleep(700);
+  for(let i=0;i<4;i++){applyGate('S'); await sleep(600);}
+}
+async function demoBell() {
+  doReset();
+  await sleep(300);
+  applyGate('H'); await sleep(700);
+  applyGate('S'); await sleep(700);
+  applyGate('H'); await sleep(700);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RESIZE
+// ═══════════════════════════════════════════════════════════
+function resize() {
+  const r = bp.getBoundingClientRect();
+  renderer.setSize(r.width, r.height);
+  camera.aspect = r.width/r.height;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ═══════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ═══════════════════════════════════════════════════════════
+let frame=0;
+function loop() {
+  requestAnimationFrame(loop);
+
+  // Auto spin when idle
+  if (autoSpin && !drag) {
+    camTh += 0.0025;
+    syncCamera();
+  }
+
+  // Arrow animation
+  if (animStep < ANIM_N) {
+    animStep++;
+    const t = animStep/ANIM_N;
+    updateArrow(lerp3(animSrc, animDst, t));
+  }
+
+  // Refresh labels every 4 frames (cheap)
+  frame++;
+  if (frame%4===0) refreshLabels();
+
+  renderer.render(scene, camera);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+updateUI(QS);
+updateArrow({x:0,y:1,z:0}); // |0⟩ = north pole = Three.js (0,1,0)
+loop();
+</script>
+</body>
+</html>
